@@ -28,3 +28,7 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- Matching rules live as pure functions in src/domain/matching.ts (tested in matching.test.ts); UI must not reimplement them.
+- Data access goes through the Repositorio interface in src/services/repository.ts so local mocks can be swapped for a database.
