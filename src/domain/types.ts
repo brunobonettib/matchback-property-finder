@@ -10,6 +10,7 @@ export interface Imovel {
   preco: number;
   quartos: number;
   status: StatusImovel;
+  demo?: boolean; // demonstration record
 }
 
 export interface Interessado {
@@ -20,6 +21,8 @@ export interface Interessado {
   orcamentoMaximo: number;
   quartosMinimos: number;
   ultimoContato: string; // ISO date (YYYY-MM-DD)
+  contato?: string; // demo contacts use non-deliverable .invalid addresses
+  demo?: boolean;
 }
 
 export type CriterioId = "finalidade" | "preco" | "quartos" | "bairro";
