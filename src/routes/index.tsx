@@ -60,7 +60,7 @@ function Dashboard() {
             <div className="grid h-9 w-9 place-items-center rounded-md bg-primary text-sm font-extrabold text-primary-foreground">MB</div>
             <div>
               <h1 className="text-lg font-bold leading-tight">MatchBack AI</h1>
-              <p className="text-xs text-muted-foreground">Recuperação de oportunidades · dados fictícios locais</p>
+              <p className="text-xs text-muted-foreground">Recuperação de oportunidades · demonstração · Florianópolis/SC · dados fictícios locais</p>
             </div>
           </div>
         </div>
@@ -86,7 +86,7 @@ function Dashboard() {
                       className={`w-full px-4 py-3 text-left transition-colors hover:bg-muted ${i.id === selId ? "bg-accent" : ""}`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="text-sm font-semibold">{i.titulo}</span>
+                        <span className="text-sm font-semibold">{i.titulo}{i.demo && <DemoTag />}</span>
                         <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">{contagens[i.id] ?? 0}</span>
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
@@ -106,7 +106,7 @@ function Dashboard() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-medium text-muted-foreground">{sel.id}</p>
-                    <h2 className="text-xl font-bold">{sel.titulo}</h2>
+                    <h2 className="text-xl font-bold">{sel.titulo}{sel.demo && <DemoTag />}</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {sel.bairro} · {sel.finalidade === "compra" ? "Venda" : "Aluguel"} · {sel.quartos} quarto(s) · {formatBRL(sel.preco)}
                     </p>
@@ -142,7 +142,8 @@ function Dashboard() {
                       <div>
                         <div className="flex items-center gap-2">
                           <h4 className="font-semibold">{c.interessado.nome}</h4>
-                          <span className="text-xs text-muted-foreground">{c.interessado.id}</span>
+                          <span className="text-xs text-muted-foreground">{c.interessado.id}{c.interessado.contato ? ` · ${c.interessado.contato}` : ""}</span>
+                          {c.interessado.demo && <DemoTag />}
                         </div>
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {c.compativel
@@ -241,4 +242,8 @@ function NovoImovelForm({ onSubmit }: { onSubmit: (d: Omit<Imovel, "id">) => voi
       </button>
     </form>
   );
+}
+
+function DemoTag() {
+  return <span className="ml-2 rounded border border-dashed px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Demo</span>;
 }
