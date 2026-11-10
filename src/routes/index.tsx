@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Finalidade, Imovel, Interessado, StatusImovel } from "@/domain/types";
 import { combinar, diasDesdeContato, formatBRL } from "@/domain/matching";
-import { repositorioLocal } from "@/services/repository";
+import type { Repositorio } from "@/services/repository";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createSupabaseRepository } from "@/services/supabase-repository";
+import { AuthGate } from "@/components/auth-gate";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -15,24 +18,55 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: Dashboard,
+  component: Application,
 });
 
 const statusLabel: Record<StatusImovel, string> = {
   disponivel: "Disponível", reservado: "Reservado", vendido: "Vendido", alugado: "Alugado",
 };
 
-function Dashboard() {
+function Application() {
+  return <AuthGate>{(client, userId, logout) =>
+    <ConnectedDashboard key={userId} client={client} userId={userId} logout={logout} />
+  }</AuthGate>;
+}
+
+function ConnectedDashboard({ client, userId, logout }: { client: SupabaseClient; userId: string; logout: () => Promise<void> }) {
+  const repository = useMemo(() => createSupabaseRepository(client, userId), [client, userId]);
+  return <Dashboard repository={repository} logout={logout} />;
+}
+
+function Dashboard({ repository, logout }: { repository: Repositorio; logout: () => Promise<void> }) {
   const [imoveis, setImoveis] = useState<Imovel[]>([]);
   const [interessados, setInteressados] = useState<Interessado[]>([]);
   const [selId, setSelId] = useState<string | null>(null);
   const [mostrarIncompat, setMostrarIncompat] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const mounted = useRef(false);
 
   useEffect(() => {
-    Promise.all([repositorioLocal.listarImoveis(), repositorioLocal.listarInteressados()]).then(([i, p]) => {
-      setImoveis(i); setInteressados(p); setSelId(i[0]?.id ?? null);
-    });
+    mounted.current = true;
+    return () => { mounted.current = false; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setLoadError("");
+    Promise.all([repository.listarImoveis(), repository.listarInteressados()]).then(([i, p]) => {
+      if (cancelled) return;
+      setImoveis(i); setInteressados(p);
+      setSelId((previous) => i.some((item) => item.id === previous) ? previous : i[0]?.id ?? null);
+    }).catch(() => {
+      if (cancelled) return;
+      setImoveis([]); setInteressados([]); setSelId(null);
+      setLoadError("Não foi possível carregar os dados. Verifique sua conexão e sessão.");
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [repository, attempt]);
 
   const contagens = useMemo(() => {
     const m: Record<string, number> = {};
@@ -47,7 +81,8 @@ function Dashboard() {
   const totalCompat = Object.values(contagens).reduce((a, b) => a + b, 0);
 
   async function adicionar(dados: Omit<Imovel, "id">) {
-    const novo = await repositorioLocal.criarImovel(dados);
+    const novo = await repository.criarImovel(dados);
+    if (!mounted.current) return;
     setImoveis((xs) => [...xs, novo]);
     setSelId(novo.id);
   }
@@ -60,13 +95,16 @@ function Dashboard() {
             <div className="grid h-9 w-9 place-items-center rounded-md bg-primary text-sm font-extrabold text-primary-foreground">MB</div>
             <div>
               <h1 className="text-lg font-bold leading-tight">MatchBack AI</h1>
-              <p className="text-xs text-muted-foreground">Recuperação de oportunidades · demonstração · Florianópolis/SC · dados fictícios locais</p>
+              <p className="text-xs text-muted-foreground">Recuperação de oportunidades · demonstração · Florianópolis/SC · dados persistidos</p>
             </div>
           </div>
+          <button className="rounded border px-3 py-2 text-sm" onClick={() => void logout()}>Sair</button>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+        {loading ? <p role="status">Carregando imóveis e interessados…</p> : loadError ?
+          <div role="alert"><p>{loadError}</p><button onClick={() => setAttempt((value) => value + 1)}>Tentar novamente</button></div> : <>
         <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Kpi label="Imóveis no catálogo" valor={imoveis.length} />
           <Kpi label="Interessados na carteira" valor={interessados.length} />
@@ -97,7 +135,7 @@ function Dashboard() {
                 ))}
               </ul>
             </div>
-            <NovoImovelForm onSubmit={adicionar} />
+            <NovoImovelForm onSubmit={adicionar} onReload={() => setAttempt((value) => value + 1)} />
           </aside>
 
           <section className="space-y-4">
@@ -184,6 +222,7 @@ function Dashboard() {
             </p>
           </section>
         </div>
+        </>}
       </main>
     </div>
   );
@@ -203,25 +242,36 @@ function Tag({ tom, children }: { tom: "success" | "destructive" | "neutral"; ch
   return <span className={`rounded px-2 py-0.5 text-xs font-semibold ${cls}`}>{children}</span>;
 }
 
-function NovoImovelForm({ onSubmit }: { onSubmit: (d: Omit<Imovel, "id">) => void }) {
+function NovoImovelForm({ onSubmit, onReload }: { onSubmit: (d: Omit<Imovel, "id">) => Promise<void>; onReload: () => void }) {
   const vazio = { titulo: "", bairro: "", finalidade: "compra" as Finalidade, preco: "", quartos: "", status: "disponivel" as StatusImovel };
   const [f, setF] = useState(vazio);
   const [erro, setErro] = useState("");
+  const [saving, setSaving] = useState(false);
+  const pending = useRef(false);
   const input = "w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
 
-  function enviar(e: React.FormEvent) {
+  async function enviar(e: React.FormEvent) {
     e.preventDefault();
+    if (pending.current) return;
     const preco = Number(f.preco), quartos = Number(f.quartos);
     if (!f.titulo.trim() || !f.bairro.trim()) return setErro("Informe título e bairro.");
-    if (!(preco > 0)) return setErro("Preço deve ser maior que zero.");
-    if (!Number.isInteger(quartos) || quartos < 0) return setErro("Quartos deve ser um número inteiro.");
+    if (!Number.isFinite(preco) || !(preco > 0)) return setErro("Preço deve ser maior que zero.");
+    if (!f.quartos.trim() || !Number.isInteger(quartos) || quartos < 0) return setErro("Quartos deve ser um número inteiro.");
     setErro("");
-    onSubmit({ titulo: f.titulo.trim(), bairro: f.bairro.trim(), finalidade: f.finalidade, preco, quartos, status: f.status });
-    setF(vazio);
+    pending.current = true; setSaving(true);
+    try {
+      await onSubmit({ titulo: f.titulo.trim(), bairro: f.bairro.trim(), finalidade: f.finalidade, preco, quartos, status: f.status });
+      setF(vazio);
+    } catch {
+      setErro("Não foi possível confirmar a gravação. Os campos foram preservados. Confira o catálogo antes de reenviar.");
+    } finally {
+      pending.current = false; setSaving(false);
+    }
   }
 
   return (
     <form onSubmit={enviar} className="space-y-3 rounded-lg border bg-card p-4">
+      <fieldset disabled={saving} className="space-y-3">
       <h2 className="text-sm font-semibold">Adicionar imóvel</h2>
       <input className={input} placeholder="Título" value={f.titulo} onChange={(e) => setF({ ...f, titulo: e.target.value })} />
       <input className={input} placeholder="Bairro" value={f.bairro} onChange={(e) => setF({ ...f, bairro: e.target.value })} />
@@ -233,13 +283,14 @@ function NovoImovelForm({ onSubmit }: { onSubmit: (d: Omit<Imovel, "id">) => voi
         <select className={input} value={f.status} onChange={(e) => setF({ ...f, status: e.target.value as StatusImovel })}>
           {Object.entries(statusLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <input className={input} type="number" min="0" placeholder="Preço (R$)" value={f.preco} onChange={(e) => setF({ ...f, preco: e.target.value })} />
+        <input className={input} type="number" min="0.01" step="0.01" placeholder="Preço (R$)" value={f.preco} onChange={(e) => setF({ ...f, preco: e.target.value })} />
         <input className={input} type="number" min="0" placeholder="Quartos" value={f.quartos} onChange={(e) => setF({ ...f, quartos: e.target.value })} />
       </div>
-      {erro && <p className="text-xs text-destructive">{erro}</p>}
+      {erro && <div role="alert" className="text-xs text-destructive"><p>{erro}</p><button type="button" onClick={onReload}>Recarregar catálogo</button></div>}
       <button className="w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-        Adicionar e recalcular
+        {saving ? "Salvando…" : "Adicionar e recalcular"}
       </button>
+      </fieldset>
     </form>
   );
 }
