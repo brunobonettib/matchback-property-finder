@@ -79,6 +79,50 @@ O fluxo Supabase → n8n foi validado em produção: um Database Webhook envia e
 
 Essa configuração é externa ao repositório. O endpoint e o segredo do webhook são mantidos nos serviços envolvidos, sem exposição no frontend. Não há notificação automática para corretores, integração com LLM ou execução do motor de matching pelo n8n implementadas. O matching apresentado na interface é executado pelas funções TypeScript do domínio.
 
+## Roadmap de Evolução — Visão de Produto
+
+As três fases abaixo são **planejadas, ainda não implementadas**. Partem do MVP com matching determinístico e integração Supabase → n8n validada para receber, validar e transformar eventos. O MatchBack AI é concebido como complemento ao CRM imobiliário existente, sem exigir sua substituição. Esta visão não representa uma implantação em uma imobiliária; os benefícios esperados são hipóteses a validar, sem promessa de conversão.
+
+### Fase 1 — Automação comercial (prioridade alta)
+
+**Objetivo:** transformar novos cadastros em oportunidades acionáveis para a equipe comercial.
+
+**Entregas previstas:**
+
+- Executar o matching automaticamente no backend após novos cadastros, reutilizando as regras de elegibilidade do domínio.
+- Enviar oportunidades compatíveis ao n8n, notificar corretores por canais internos e criar tarefas de acompanhamento.
+- Evitar processamento e tarefas duplicados, tratar falhas e registrar eventos para acompanhamento operacional.
+
+**Benefício comercial esperado:** reduzir a identificação manual de oportunidades e facilitar o acompanhamento dos interessados pela equipe.
+
+### Fase 2 — IA generativa e experiência comercial
+
+**Objetivo:** apoiar a preparação do atendimento e facilitar a consulta às oportunidades, preservando critérios objetivos de elegibilidade.
+
+**Entregas previstas:**
+
+- Assistente para gerar rascunhos personalizados de contato com interessados, com revisão humana antes de qualquer mensagem externa.
+- Busca em linguagem natural convertida em filtros estruturados e resumos explicáveis das oportunidades, fundamentados nos dados e critérios do matching.
+- Avaliar integração com LLMs via API ou modelos locais, considerando custo, privacidade e desempenho.
+- Manter as regras determinísticas como fonte de verdade para elegibilidade; a IA generativa apoiará a comunicação e a consulta, sem redefinir quem é compatível.
+
+**Benefício comercial esperado:** diminuir o esforço de preparação dos contatos e tornar as informações mais acessíveis aos corretores, mantendo supervisão humana.
+
+### Fase 3 — Integração e escala
+
+**Objetivo:** conectar a recuperação de oportunidades à rotina comercial e ampliar o uso conforme a necessidade das equipes.
+
+**Entregas previstas:**
+
+- Integrar o CRM imobiliário existente, conforme as APIs disponíveis, e sincronizar imóveis e interessados sem duplicações.
+- Incorporar histórico de atendimentos e acompanhamento do funil comercial.
+- Criar dashboards e indicadores de oportunidades, atendimentos e conversões, com base nos registros efetivamente disponíveis.
+- Avaliar agentes de IA com ferramentas e ações sujeitas à aprovação humana.
+- Evoluir perfis de acesso, auditoria e observabilidade, com requisitos de privacidade e tratamento de dados alinhados à LGPD.
+- Suportar múltiplas equipes conforme a necessidade, com separação de acesso aos dados.
+
+**Benefício comercial esperado:** dar continuidade ao atendimento entre sistemas e oferecer visibilidade da operação para orientar decisões de gestão.
+
 ## Testes e build
 
 ```sh
